@@ -6,7 +6,7 @@ var showdown = require("showdown"),
   converter = new showdown.Converter();
 
 // get all RACE files (sorted)
-var races = getAllRacesSorted("./RACE").slice(0, 1);
+var races = getAllRacesSorted("./RACE");
 
 // convert races markdown into manageable data structure
 races = getDataStructureForRaces(races);
@@ -21,42 +21,125 @@ writeQuizzPages(races);
 
 function getDataStructureForRaces(races) {
   return races.map((race) => {
+    console.log(`GENERATING QUIZ FOR RACE ${race.number}`);
+
     // read markdown from file
     const markdown = fs.readFileSync(race.pathAndFilename).toString();
 
-    // split markdown into questions
-    var questions = markdown.split("---").filter((q) => q.trim().length);
+    // detect and store which RACE layout is applied
+    const isRaceZeroLayout = !markdown.startsWith("**Note**:");
+    race.layout = isRaceZeroLayout ? "zero" : "after_zero";
 
-    // go through all questions
-    race.questions = questions.map((question) => {
-      const q = {};
+    // handle race depending to layout
+    if (isRaceZeroLayout) {
+      return handleRaceZeroLayout(race, markdown);
+    } else {
+      return handleNonRaceZeroLayout(race, markdown);
+    }
+  });
+}
 
-      const questionAndAnswers = question.split("```");
+function handleRaceZeroLayout(race, markdown) {
+  // split markdown into questions
+  var questions = markdown.split("---").filter((q) => q.trim().length);
 
-      // add headline and code
-      q.headline = questionAndAnswers[0].trim();
-      q.code = "```" + questionAndAnswers[1] + "```";
+  // go through all questions
+  race.questions = questions.map((question) => {
+    const q = {};
 
-      // add answers (including resolution)
-      const correctAnswers = questionAndAnswers[2]
-        .match(/Answers\](.+)\*\*/)[1]
-        .trim()
-        .split(",");
+    const questionAndAnswers = question.split("```");
 
-      q.answers = questionAndAnswers[2].match(/\([A-Z]\):.+/g).map((answer) => {
-        const letter = answer.match(/\(([A-Z])\)/)[1];
-        return {
-          letter,
-          text: answer.match(/:.+/)[0].trim(),
-          correct: correctAnswers.includes(letter),
-        };
-      });
+    // add headline and code
+    q.headline = questionAndAnswers[0].trim();
+    q.code = "```" + questionAndAnswers[1] + "```";
 
-      return q;
+    // add answers (including resolution)
+    const correctAnswers = questionAndAnswers[2]
+      .match(/Answers\](.+)\*\*/)[1]
+      .trim()
+      .split(",");
+
+    q.answers = questionAndAnswers[2].match(/\([A-Z]\):.+/g).map((answer) => {
+      const letter = answer.match(/\(([A-Z])\)/)[1];
+      return {
+        letter,
+        text: answer.match(/:.+/)[0].trim(),
+        correct: correctAnswers.includes(letter),
+      };
     });
 
-    return race;
+    return q;
   });
+
+  return race;
+}
+
+function handleNonRaceZeroLayout(race, markdown) {
+  // split markdown into notes, code and questions
+  const notesCodeAndQuestions = markdown
+    .split("---")
+    .filter((q) => q.trim().length);
+
+  // add notes and code
+  const notesAndCode = notesCodeAndQuestions[0].split("```");
+  race.notes = notesAndCode[0];
+  race.code = "```" + notesAndCode[1] + "```";
+
+  // add questions
+  var questions = notesCodeAndQuestions.slice(1).map(removeBackSlashes);
+  race.questions = questions.map((question, index) => {
+    const q = {};
+
+    var questionAndAnswers = question
+      .split("\n")
+      .map((e) => e.trim())
+      .filter((e) => e.length);
+
+    questionAndAnswers = [
+      questionAndAnswers[0],
+      questionAndAnswers.slice(1, -1).join("\n"),
+      questionAndAnswers[questionAndAnswers.length - 1],
+    ];
+
+    // add headline
+    q.headline = questionAndAnswers[0].trim();
+
+    // add answers (including resolution)
+    const correctAnswers = questionAndAnswers[2]
+      .match(/Answers\]:?(.+)\*\*/)[1]
+      .trim()
+      .split(",");
+
+    const answers = questionAndAnswers[1].split("\n");
+
+    // NOTE: We need to handle single answers spread across multiple lines (e.g. source code in answer)
+    const mergedAnswers = [];
+    answers.forEach((answer) => {
+      // NOTE: We assume that only questions start with "("
+      if (!answer.startsWith("(")) {
+        mergedAnswers[mergedAnswers.length - 1] += " " + answer; // TODO: Improve (e.g. add newlines again)
+      } else {
+        mergedAnswers.push(answer);
+      }
+    });
+
+    q.answers = mergedAnswers.map((answer) => {
+      const letter = answer.match(/\(([A-Z])\)/)[1];
+      return {
+        letter,
+        text: converter.makeHtml(removeBackSlashes(answer)),
+        correct: correctAnswers.includes(letter),
+      };
+    });
+
+    return q;
+  });
+
+  return race;
+}
+
+function removeBackSlashes(text) {
+  return text.replace("\\", "");
 }
 
 function getAllRacesSorted(path) {
@@ -73,11 +156,11 @@ function getAllRacesSorted(path) {
 }
 
 function writeIndexPage(races) {
-  var indexPage = "<html><body>";
+  var indexPage = "<html><body><h1>Secureum Races</h1><ul>";
   for (const race of races) {
-    indexPage += `<a href="./race_${race.number}.html">RACE ${race.number}</a>`;
+    indexPage += `<li><a href="./race_${race.number}.html">RACE ${race.number}</a></li>`;
   }
-  indexPage += "<body><html>";
+  indexPage += "</ul><body><html>";
   if (!fs.existsSync("./quizzes")) {
     fs.mkdirSync("./quizzes");
   }
@@ -90,6 +173,12 @@ function writeQuizzPages(races) {
 }
 
 function writeQuizPage(race) {
+  // get layout
+  const layout = race.layout;
+  if (!layout) {
+    throw new Error(`No layout set for race ${race.number}`);
+  }
+
   // open page
   var quizzPage = "<html><head>";
 
@@ -146,12 +235,6 @@ function writeQuizPage(race) {
         var input = inputs[i];
         if(input.type == "checkbox") {
             const isCorrectAnswer = "" + input.checked === input.getAttribute("correct");
-
-            // correct answer not checked => red
-            // correct answer checked => green
-            // incorrect answer checked => red
-            // incorrect answer not checked =? green
-
             if (isCorrectAnswer) {
                 document.getElementById(input.id).className = "success";
                 findLableForInput(input.id).className = "success";
@@ -191,17 +274,23 @@ function writeQuizPage(race) {
   quizzPage += `<input type="submit" value="VALIDATE ANSWERS" onclick="validate()"/>&nbsp;`;
   quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="selectAllAnswers()"/>`;
 
+  if (layout !== "race") {
+    quizzPage += converter.makeHtml(race.code);
+  }
+
   // questions
   race.questions.forEach((question, x) => {
     quizzPage += converter.makeHtml(question.headline);
-    quizzPage += converter.makeHtml(question.code);
+    if (layout === "race") {
+      quizzPage += converter.makeHtml(question.code);
+    }
     question.answers.forEach((answer, i) => {
       const id = `${x}_${i}`;
       if (i !== 0) {
         quizzPage += "<br/>";
       }
-      const label = converter.makeHtml(answer.text).slice(5, -4); // TODO correct the 5 (see unsliced string!)
-      quizzPage += `<input type="checkbox" name="${x}" id="${id}" correct="${answer.correct}"><label for="${id}">${answer.letter}: ${label}</label>`;
+      const label = converter.makeHtml(answer.text).slice(3, -4).trim();
+      quizzPage += `<input type="checkbox" name="${x}" id="${id}" correct="${answer.correct}"><label for="${id}">${label}</label>`;
     });
 
     quizzPage += `<br/><br/><span>ANSWERS: ${question.answers
