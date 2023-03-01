@@ -1,0 +1,12 @@
+{
+  "name": "secureum-race-quiz-generator",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:snietert/secureum-race-quiz-generator.git",
+  "license": "MIT",
+  "dependencies": {
+    "markdown-json": "^1.6.1",
+    "md-2-json": "^2.0.0",
+    "showdown": "^2.1.0"
+  }
+}
