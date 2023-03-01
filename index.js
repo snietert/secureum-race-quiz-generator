@@ -1,7 +1,4 @@
-const { log } = require("console");
 const fs = require("fs");
-const util = require("util");
-
 var showdown = require("showdown"),
   converter = new showdown.Converter();
 
@@ -211,7 +208,7 @@ function writeQuizPage(race) {
     return unansweredQuestions;
   }
 
-  function selectAllAnswers () {
+  function clickSelectAllAnswersButton () {
     var inputs = document.getElementsByTagName("input");
     for(var i = 0; i < inputs.length; i++) {
       var input = inputs[i];
@@ -221,15 +218,28 @@ function writeQuizPage(race) {
     }
   }
 
+  function clickValidateQuestionsButton() {
+    var result = validate();
+    var questionsCount = ${race.questions.length};
+    if (result) {
+      alert(result.length + " OF " + questionsCount + " QUESTIONS ANSWERED INCORRECTLY. RESULT STORED!");
+    } else {
+      alert("ALL " + questionsCount + " QUESTIONS ANSWERED CORRECTLY. RESULT STORED!");
+    }
+  }
+
   function validate() {
     // check if all questions were answered
     var unansweredQuestions = getUnAnsweredQuestions();
+
+    // handle result
     if (unansweredQuestions.length) {
       alert("QUESTIONS " + unansweredQuestions + " WERE NOT ANSWERED!");
       return;
     }
 
     // validate all checkboxes and format answers
+    var invalidAnsweredQuestions = [];
     var inputs = document.getElementsByTagName("input");
     for(var i = 0; i < inputs.length; i++) {
         var input = inputs[i];
@@ -239,11 +249,17 @@ function writeQuizPage(race) {
                 document.getElementById(input.id).className = "success";
                 findLableForInput(input.id).className = "success";
             } else {
+                var number = parseInt(input.name) + 1;
+                if (!invalidAnsweredQuestions.includes(number)) {
+                  invalidAnsweredQuestions.push(number);
+                }
                 document.getElementById(input.id).className = "error";
                 findLableForInput(input.id).className = "error";
             }
         }  
     }
+
+    return invalidAnsweredQuestions.length ? invalidAnsweredQuestions : null;
   }
 
   function findLableForInput(id) {
@@ -271,8 +287,8 @@ function writeQuizPage(race) {
   quizzPage += `<a href="./index.html"><< BACK</a><br/><br/>`;
   quizzPage += `<h1>RACE ${race.number}</h1>`;
 
-  quizzPage += `<input type="submit" value="VALIDATE ANSWERS" onclick="validate()"/>&nbsp;`;
-  quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="selectAllAnswers()"/>`;
+  quizzPage += `<input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>&nbsp;`;
+  quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="clickSelectAllAnswersButton()"/>`;
 
   if (layout !== "race") {
     quizzPage += converter.makeHtml(race.code);
@@ -289,7 +305,7 @@ function writeQuizPage(race) {
       if (i !== 0) {
         quizzPage += "<br/>";
       }
-      const label = converter.makeHtml(answer.text).slice(3, -4).trim();
+      const label = converter.makeHtml(answer.text).slice(3, -4).trim(); // NOTE: Slice remove the surrounding "p" tags
       quizzPage += `<input type="checkbox" name="${x}" id="${id}" correct="${answer.correct}"><label for="${id}">${label}</label>`;
     });
 
@@ -303,7 +319,7 @@ function writeQuizPage(race) {
   });
 
   // validation button
-  quizzPage += `<br/><br/><input type="submit" value="VALIDATE ANSWERS" onclick="validate()"/>`;
+  quizzPage += `<br/><br/><input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>`;
 
   // close page
   quizzPage += "</body></html>";
