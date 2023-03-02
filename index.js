@@ -11,28 +11,31 @@ races = getDataStructureForRaces(races);
 // write index page
 writeIndexPage(races);
 
-// write quiz pages for races
+// write quiz pages for all races
 writeQuizzPages(races);
 
 // ---------------------------------- FUNCTIONS ----------------------------------
 
 function getDataStructureForRaces(races) {
   return races.map((race) => {
-    console.log(`GENERATING QUIZ FOR RACE ${race.number}`);
+    console.log(
+      `\n--------------- GENERATING QUIZ FOR RACE ${race.number} --------------- `
+    );
 
     // read markdown from file
     const markdown = fs.readFileSync(race.pathAndFilename).toString();
 
     // detect and store which RACE layout is applied
-    const isRaceZeroLayout = !markdown.startsWith("**Note**:");
-    race.layout = isRaceZeroLayout ? "zero" : "after_zero";
+    const isRaceZeroLayout = !markdown.startsWith("**Note");
+    race.layout = isRaceZeroLayout
+      ? "race_zero_layout"
+      : "not_race_zero_layout";
 
     // handle race depending to layout
     if (isRaceZeroLayout) {
       return handleRaceZeroLayout(race, markdown);
-    } else {
-      return handleNonRaceZeroLayout(race, markdown);
     }
+    return handleNonRaceZeroLayout(race, markdown);
   });
 }
 
@@ -40,32 +43,45 @@ function handleRaceZeroLayout(race, markdown) {
   // split markdown into questions
   var questions = markdown.split("---").filter((q) => q.trim().length);
 
-  // go through all questions
-  race.questions = questions.map((question) => {
-    const q = {};
+  // add questions
+  race.questions = questions.map((question, index) => {
+    console.log("Handle question " + (index + 1));
 
-    const questionAndAnswers = question.split("```");
+    const q = {};
+    const headlineAndQandA = question.split("```");
 
     // add headline and code
-    q.headline = questionAndAnswers[0].trim();
-    q.code = "```" + questionAndAnswers[1] + "```";
+    q.headline = headlineAndQandA[0].trim();
+    q.code = "```" + headlineAndQandA[1] + "```";
 
-    // add answers (including resolution)
-    const correctAnswers = questionAndAnswers[2]
-      .match(/Answers\](.+)\*\*/)[1]
+    // add correct answers
+    q.correctAnswers = headlineAndQandA[2]
+      .match(/Answers\]:?(.+)\*\*/)[1]
       .trim()
-      .split(",");
+      .split(" or ") // NOTE: multiple answer combinations can be correct
+      .map((a) => a.split(","));
 
-    q.answers = questionAndAnswers[2].match(/\([A-Z]\):.+/g).map((answer) => {
+    // add correct answers for display
+    q.correctAnswersDisplay = headlineAndQandA[2]
+      .match(/Answers\]:?(.+)\*\*/)[1]
+      .trim();
+
+    // add answer options
+    q.answers = headlineAndQandA[2].match(/\([A-Z]\):.+/g).map((answer) => {
       const letter = answer.match(/\(([A-Z])\)/)[1];
       return {
         letter,
-        text: answer.match(/:.+/)[0].trim(),
-        correct: correctAnswers.includes(letter),
+        text: converter.makeHtml(removeBackSlashes(answer)),
       };
     });
 
     return q;
+  });
+
+  // add all correct answers to race
+  race.correctAnswers = {};
+  race.questions.forEach((question, index) => {
+    race.correctAnswers[index] = question.correctAnswers;
   });
 
   return race;
@@ -79,36 +95,43 @@ function handleNonRaceZeroLayout(race, markdown) {
 
   // add notes and code
   const notesAndCode = notesCodeAndQuestions[0].split("```");
-  race.notes = notesAndCode[0];
+  race.notes = notesAndCode[0].trim();
   race.code = "```" + notesAndCode[1] + "```";
 
   // add questions
-  var questions = notesCodeAndQuestions.slice(1).map(removeBackSlashes);
+  const questions = notesCodeAndQuestions.slice(1).map(removeBackSlashes);
   race.questions = questions.map((question, index) => {
-    const q = {};
+    console.log("Handle question " + (index + 1));
 
-    var questionAndAnswers = question
+    const q = {};
+    var headlineAndQandA = question
       .split("\n")
       .map((e) => e.trim())
       .filter((e) => e.length);
 
-    questionAndAnswers = [
-      questionAndAnswers[0],
-      questionAndAnswers.slice(1, -1).join("\n"),
-      questionAndAnswers[questionAndAnswers.length - 1],
+    headlineAndQandA = [
+      headlineAndQandA[0],
+      headlineAndQandA.slice(1, -1).join("\n"),
+      headlineAndQandA[headlineAndQandA.length - 1],
     ];
 
     // add headline
-    q.headline = questionAndAnswers[0].trim();
+    q.headline = headlineAndQandA[0].trim();
 
-    // add answers (including resolution)
-    const correctAnswers = questionAndAnswers[2]
+    // add correct answers
+    q.correctAnswers = headlineAndQandA[2]
       .match(/Answers\]:?(.+)\*\*/)[1]
       .trim()
-      .split(",");
+      .split(" or ")
+      .map((a) => a.split(","));
 
-    const answers = questionAndAnswers[1].split("\n");
+    // add correct answers for display
+    q.correctAnswersDisplay = headlineAndQandA[2]
+      .match(/Answers\]:?(.+)\*\*/)[1]
+      .trim();
 
+    // add answer options
+    const answers = headlineAndQandA[1].split("\n");
     // NOTE: We need to handle single answers spread across multiple lines (e.g. source code in answer)
     const mergedAnswers = [];
     answers.forEach((answer) => {
@@ -125,11 +148,16 @@ function handleNonRaceZeroLayout(race, markdown) {
       return {
         letter,
         text: converter.makeHtml(removeBackSlashes(answer)),
-        correct: correctAnswers.includes(letter),
       };
     });
 
     return q;
+  });
+
+  // add all correct answers to race
+  race.correctAnswers = {};
+  race.questions.forEach((question, index) => {
+    race.correctAnswers[index] = question.correctAnswers;
   });
 
   return race;
@@ -153,7 +181,7 @@ function getAllRacesSorted(path) {
 }
 
 function writeIndexPage(races) {
-  var indexPage = "<html><body><h1>Secureum Races</h1><ul>";
+  var indexPage = "<html><body><h1>Secureum RACEs</h1><ul>";
   for (const race of races) {
     indexPage += `<li><a href="./race_${race.number}.html">RACE ${race.number}</a></li>`;
   }
@@ -182,31 +210,8 @@ function writeQuizPage(race) {
   // add scripts
   quizzPage += `<script type="text/javascript">
 
-  function getUnAnsweredQuestions() {
-    var inputs = document.getElementsByTagName("input");
-
-    // count the number of checked checkboxes per question
-    var checkedCount = {};
-    for(var i = 0; i < inputs.length; i++) {
-        var input = inputs[i];
-        if(input.type == "checkbox") {
-            var number = parseInt(input.name) + 1;
-            if (!checkedCount[number]) {
-                checkedCount[number] = 0;
-            }
-            checkedCount[number] += input.checked ? 1 : 0; // NOTE: We assume in every question at least 1 checkbox must be set
-        }
-    }
-
-    // collect all questions that were not answered
-    const unansweredQuestions = []
-    for (var [key, value] of Object.entries(checkedCount)) {
-        if (value === 0) {
-            unansweredQuestions.push(key);
-        }
-    }
-    return unansweredQuestions;
-  }
+  // store correct answers
+  var correctAnswers = ${JSON.stringify(race.correctAnswers)};
 
   function clickSelectAllAnswersButton () {
     var inputs = document.getElementsByTagName("input");
@@ -219,18 +224,40 @@ function writeQuizPage(race) {
   }
 
   function clickValidateQuestionsButton() {
-    var result = validate();
-    var questionsCount = ${race.questions.length};
-    if (result) {
-      alert(result.length + " OF " + questionsCount + " QUESTIONS ANSWERED INCORRECTLY. RESULT STORED!");
+    // get validation result
+    var results = validate();
+    var keys = Object.keys(results);
+
+    // highlight all questions
+    var failedQuestionsCount = 0;
+    keys.forEach(key => {
+      var question = document.getElementById("question_" + key);
+      if (results[key] === true) {
+        question.className = "success";
+      } else {
+        question.className = "failure";
+        failedQuestionsCount++;
+      }
+    });
+
+    // reveal answers for all questions
+    var answerDisplays = document.getElementsByClassName("hide");
+    while (answerDisplays && answerDisplays.length) {
+      answerDisplays[0].className = "";
+    }
+    
+    // show alert
+    var questionsCount = keys.length;
+    if (failedQuestionsCount > 0) {
+      alert(failedQuestionsCount + " OF " + questionsCount + " QUESTIONS ANSWERED INCORRECTLY");
     } else {
-      alert("ALL " + questionsCount + " QUESTIONS ANSWERED CORRECTLY. RESULT STORED!");
+      alert("ALL " + questionsCount + " QUESTIONS ANSWERED CORRECTLY");
     }
   }
-
+ 
   function validate() {
     // check if all questions were answered
-    var unansweredQuestions = getUnAnsweredQuestions();
+    var unansweredQuestions = getUnansweredQuestions();
 
     // handle result
     if (unansweredQuestions.length) {
@@ -241,43 +268,86 @@ function writeQuizPage(race) {
     // validate all checkboxes and format answers
     var invalidAnsweredQuestions = [];
     var inputs = document.getElementsByTagName("input");
+
+    // get checkbox answers grouped per question
+    var groupedAnswers = {};
+    for(var i = 0; i < inputs.length; i++) {
+      var input = inputs[i];
+      if(input.type == "checkbox") {
+        var name = input.name;
+
+        // make sure to have an entry even if no checkbox checked for question
+        if (groupedAnswers[name] === undefined)  {
+          groupedAnswers[name] = [];
+        }
+
+        // collect the chosen answer options
+        if (input.checked) {
+          groupedAnswers[name].push(input.getAttribute("letter"));
+        }
+      }
+    }
+
+    // compare grouped answers against correct answer option combinations
+    var results = {};
+
+    var keys = Object.keys(groupedAnswers);
+    for(var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var groupedAnswer = groupedAnswers[key];
+      var correctAnswer = correctAnswers[key];
+      correctAnswer.forEach((answer, index) => {
+        if (Object.keys(results).includes(key)) {
+          return;
+        }
+
+        var correct = answer.length === groupedAnswer.length && groupedAnswer.every(a => answer.includes(a));
+        if (correct) {
+          results[key] = true;
+        } else if (index + 1 === correctAnswer.length) {
+          results[key] = false;
+        }
+      });
+    }
+
+    return results;
+  }
+
+  function getUnansweredQuestions() {
+    var inputs = document.getElementsByTagName("input");
+
+    // count the number of checked checkboxes per question
+    var checkedCount = {};
     for(var i = 0; i < inputs.length; i++) {
         var input = inputs[i];
         if(input.type == "checkbox") {
-            const isCorrectAnswer = "" + input.checked === input.getAttribute("correct");
-            if (isCorrectAnswer) {
-                document.getElementById(input.id).className = "success";
-                findLableForInput(input.id).className = "success";
-            } else {
-                var number = parseInt(input.name) + 1;
-                if (!invalidAnsweredQuestions.includes(number)) {
-                  invalidAnsweredQuestions.push(number);
-                }
-                document.getElementById(input.id).className = "error";
-                findLableForInput(input.id).className = "error";
+            var number = parseInt(input.name) + 1; //NOTE: Already preparing for display
+            if (!checkedCount[number]) {
+                checkedCount[number] = 0;
             }
-        }  
+            checkedCount[number] += input.checked ? 1 : 0;
+        }
     }
 
-    return invalidAnsweredQuestions.length ? invalidAnsweredQuestions : null;
+    // collect all questions that were not answered
+    const unansweredQuestions = [];
+    for (var [key, value] of Object.entries(checkedCount)) {
+        if (value === 0) {
+            unansweredQuestions.push(key);
+        }
+    }
+    return unansweredQuestions;
   }
 
-  function findLableForInput(id) {
-    labels = document.getElementsByTagName('label');
-    for( var i = 0; i < labels.length; i++ ) {
-       if (labels[i].htmlFor == id)
-            return labels[i];
-    }
-    return null;
- }
-  
   </script>
 
   <style>
-    .error { background: red; color: #fff; }
-    .success { background: #008000; color: #fff; }
+    .hide { display: none; }
+    .success { border: 4px solid #008000; }
+    .failure { border: 4px solid red; }
     code { font-family: monospace; }
     pre { background: #eee; padding: 10px; }
+
   </style>
   `;
 
@@ -288,30 +358,33 @@ function writeQuizPage(race) {
   quizzPage += `<h1>RACE ${race.number}</h1>`;
 
   quizzPage += `<input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>&nbsp;`;
-  quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="clickSelectAllAnswersButton()"/>`;
+  // quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="clickSelectAllAnswersButton()"/>`;
 
-  if (layout !== "race") {
+  if (layout !== "race_zero_layout") {
     quizzPage += converter.makeHtml(race.code);
   }
 
   // questions
   race.questions.forEach((question, x) => {
+    quizzPage += `<div id="question_${x}">`;
+
     quizzPage += converter.makeHtml(question.headline);
     if (layout === "race") {
       quizzPage += converter.makeHtml(question.code);
     }
+
     question.answers.forEach((answer, i) => {
       const id = `${x}_${i}`;
       if (i !== 0) {
         quizzPage += "<br/>";
       }
       const label = converter.makeHtml(answer.text).slice(3, -4).trim(); // NOTE: Slice remove the surrounding "p" tags
-      quizzPage += `<input type="checkbox" name="${x}" id="${id}" correct="${answer.correct}"><label for="${id}">${label}</label>`;
+      quizzPage += `<input type="checkbox" name="${x}" letter="${answer.letter}" "id="${id}"><label for="${id}">${label}</label>`;
     });
 
-    quizzPage += `<br/><br/><span>ANSWERS: ${question.answers
-      .filter((a) => a.correct)
-      .map((a) => a.letter)}</span>`;
+    quizzPage += `<br/><br/><span class="hide">Correct Answers: ${question.correctAnswersDisplay}</span>`;
+
+    quizzPage += `</div>`;
 
     if (x < race.questions.length - 1) {
       quizzPage += "<hr/>";
@@ -319,7 +392,7 @@ function writeQuizPage(race) {
   });
 
   // validation button
-  quizzPage += `<br/><br/><input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>`;
+  quizzPage += `<br/><input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>`;
 
   // close page
   quizzPage += "</body></html>";
