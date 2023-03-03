@@ -367,7 +367,7 @@ function writeQuizPage(race) {
     quizzPage += `<div id="question_${x}">`;
 
     quizzPage += converter.makeHtml(question.headline);
-    if (layout === "race") {
+    if (layout === "race_zero_layout") {
       quizzPage += converter.makeHtml(question.code);
     }
 
