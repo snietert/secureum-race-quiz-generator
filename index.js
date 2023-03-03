@@ -248,11 +248,8 @@ function writeQuizPage(race) {
     
     // show alert
     var questionsCount = keys.length;
-    if (failedQuestionsCount > 0) {
-      alert(failedQuestionsCount + " OF " + questionsCount + " QUESTIONS ANSWERED INCORRECTLY");
-    } else {
-      alert("ALL " + questionsCount + " QUESTIONS ANSWERED CORRECTLY");
-    }
+    var correctPercentage = Math.floor(((questionsCount - failedQuestionsCount)/questionsCount) * 100);
+    alert(questionsCount - failedQuestionsCount + " OF " + questionsCount + " QUESTIONS ANSWERED CORRECTLY (" + correctPercentage + "%)");
   }
  
   function validate() {
@@ -358,7 +355,8 @@ function writeQuizPage(race) {
   quizzPage += `<h1>RACE ${race.number}</h1>`;
 
   quizzPage += `<input type="submit" value="VALIDATE ANSWERS" onclick="clickValidateQuestionsButton()"/>&nbsp;`;
-  // quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="clickSelectAllAnswersButton()"/>`;
+  quizzPage += `<input type="submit" value="SELECT ALL ANSWERS" onclick="clickSelectAllAnswersButton()"/>`;
+  quizzPage += "<br /><br />";
 
   if (layout !== "race_zero_layout") {
     quizzPage += converter.makeHtml(race.code);
@@ -378,8 +376,8 @@ function writeQuizPage(race) {
       if (i !== 0) {
         quizzPage += "<br/>";
       }
-      const label = converter.makeHtml(answer.text).slice(3, -4).trim(); // NOTE: Slice remove the surrounding "p" tags
-      quizzPage += `<input type="checkbox" name="${x}" letter="${answer.letter}" "id="${id}"><label for="${id}">${label}</label>`;
+      const label = converter.makeHtml(answer.text).slice(3, -4).trim(); // NOTE: Slice removes the surrounding "p" tags
+      quizzPage += `<label><input type="checkbox" name="${x}" letter="${answer.letter}" "id="${id}">${label}</label>`;
     });
 
     quizzPage += `<br/><br/><span class="hide">Correct Answers: ${question.correctAnswersDisplay}</span>`;
