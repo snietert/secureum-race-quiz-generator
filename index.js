@@ -59,7 +59,7 @@ function handleRaceZeroLayout(race, markdown) {
       .match(/Answers\]:?(.+)\*\*/)[1]
       .trim()
       .split(" or ") // NOTE: multiple answer combinations can be correct
-      .map((a) => a.split(","));
+      .map((a) => a.split(",").map((a) => a.trim()));
 
     // add correct answers for display
     q.correctAnswersDisplay = headlineAndQandA[2]
@@ -123,7 +123,7 @@ function handleNonRaceZeroLayout(race, markdown) {
       .match(/Answers\]:?(.+)\*\*/)[1]
       .trim()
       .split(" or ")
-      .map((a) => a.split(","));
+      .map((a) => a.split(",").map((a) => a.trim()));
 
     // add correct answers for display
     q.correctAnswersDisplay = headlineAndQandA[2]
